@@ -22,6 +22,7 @@ int main( int argc, char** argv )
   bool IsCentral = 0;
   bool fUseTotalQ= 0;
   bool fOptimal  = 0;
+  bool fOptAzi   = 0;
 
   TString dummy;
   TString inputFileName = argv[1];
@@ -47,6 +48,8 @@ int main( int argc, char** argv )
     iFile >> dummy >> fUseTotalQ;
     if( iFile.eof() ) break;
     iFile >> dummy >> fOptimal;
+    if( iFile.eof() ) break;
+    iFile >> dummy >> fOptAzi;
     if( iFile.eof() ) break;
 
     cout << "nEvents : " << nEvents << endl;
@@ -99,8 +102,11 @@ int main( int argc, char** argv )
   // -------------------------------------------------------
 
   SimulationTools doSimulation;
+  doSimulation.SetOptimizedAzimuth( fOptAzi );
   doSimulation.SetCollisionProperties( proj_Z, proj_A, targ_Z, targ_A, ke_beam );
-  doSimulation.CallParticleFrom( hist_pt_rap_phi_rest );
+  //doSimulation.CallParticleFrom( hist_pt_rap_phi_rest );
+  doSimulation.SetRestoredHist( hist_pt_rap_phi_rest );
+  doSimulation.SetMeasuredHist( hist_pt_rap_phi_meas );
 
   TString effFileName = Form( "/home/jhpark/work/deblurring_spirit/merging/efficiency/eff_Sn%d_%s.root", proj_A, collisionEvent.Data() );
   auto efficiencyFile = new TFile( effFileName, "READ" ); // Like Exp
@@ -108,9 +114,8 @@ int main( int argc, char** argv )
   doSimulation.EnableEfficiency();
   doSimulation.SetEfficiencyFile( efficiencyFile );
 
-  doSimulation.SetUseOptimal( fOptimal );
+  //doSimulation.SetUseOptimal( fOptimal ); // No need?
   doSimulation.SetUseTotalQ( fUseTotalQ );
-  doSimulation.SetMeasuredHist( hist_pt_rap_phi_meas );
 
   TString fileName = Form( "output_err.root" );
   doSimulation.SetOutputfileName( fileName );
@@ -123,20 +128,18 @@ int main( int argc, char** argv )
   {
     cout << "Sampling: " << nSample << endl;
 
-    //cout << "TM generation from total Q " << clock() << endl;
+    if( nSample%4==0 ) doSimulation.ResetRestoredHist();
+
     // Make transfer matrix
     doSimulation.ConstructTMfromQ();
 
-    //cout << "Renormalize Distribution " << clock() << endl;
     // Normalize estimated distribution
     doSimulation.NormalizeEstimatedDistribution();
 
-    //cout << "RL deblurring " << clock() << endl;
     // Do RL deblurring
     doSimulation.RandomizeRegularization();
     doSimulation.RLdeblurring();
 
-    //cout << "Calculate error " << clock() << endl;
     // Renormalize error
     doSimulation.EstimaedError( nSample );
   }

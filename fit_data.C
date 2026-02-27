@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
 // General parameters, we only consider alphas for the test
+bool bUseOptAzi = 1;
 
 double be = .008;
 double mass_proton     = .9383;
@@ -46,7 +47,7 @@ void fit_data()
 
   //auto file_eff = new TFile( "eff_Sn108_midcentral.root", "READ" );
   //teff = (TEfficiency*) file_eff->Get( "e3_alpha_HighRes" );
-  auto file_eff = new TFile( "data_midcentral.root", "READ" );
+  auto file_eff = new TFile( "./efficiency/data_midcentral.root", "READ" );
   teff = (TH2D*) file_eff->Get( "h2PtYEff_108Sn_4He_mbin0_iter0" );
 
   auto file = new TFile( "output_err.root", "READ" );
@@ -54,7 +55,10 @@ void fit_data()
   auto hist = (TH3D*) file->Get( "hist_pt_rap_phi_rest_alpha" );
 
   int nBinPt = hist->GetNbinsX();
-  double binWidthPt = hist->GetXaxis()->GetBinWidth(1);
+  //double binWidthPt = hist->GetXaxis()->GetBinWidth(1);
+  static const int nParticleType = 5;
+  double binWidthPt[nParticleType] = {0};
+  binWidthPt[0] = .10; binWidthPt[1] = .15; binWidthPt[2] = .23; binWidthPt[3] = .29; binWidthPt[4] = .23;
   double ptMin = hist->GetXaxis()->GetXmin();
   double ptMax = hist->GetXaxis()->GetXmax();
 
@@ -63,26 +67,76 @@ void fit_data()
   double yyMin = hist->GetYaxis()->GetXmin();
   double yyMax = hist->GetYaxis()->GetXmax();
 
+  int nBinPhy = 12;
   int nBinPhi = hist->GetNbinsZ();
   double binWidthPhy = hist->GetZaxis()->GetBinWidth(1);
   double phiMin = hist->GetZaxis()->GetXmin();
   double phiMax = hist->GetZaxis()->GetXmax();
 
+
+  // -------------------------------------------------------------------------------------
+  // Optimized binning in azimuth
+  static const int nBinPtMax = 25;
+  int nBinPhyOpt[nBinPtMax] = {0};
+  double binWidthPhyOpt[nBinPtMax] = {0};
+  double phiMinOpt[nBinPtMax] = {0};
+  double phiMaxOpt[nBinPtMax] = {0};
+  int nBinPhiOpt[nBinPtMax] = {0};
+
+  int ipt_start = 1;
+  for( int ipt=nBinPtMax-1; 0<=ipt; ipt-- )
+  {
+    int nphy = TMath::Nint( .5*TMath::Pi()*((ipt+1)+(ipt+1)-1) ); // ipt -> ipt+1 for index prob
+    nphy = TMath::Min( nphy, nBinPhy );
+    //nphy = nBinPhy; // Test
+
+    if( nphy==nBinPhy ) ipt_start = ipt;
+    nBinPhyOpt[ipt] = nphy;
+    binWidthPhyOpt[ipt] = TMath::Pi() / nBinPhyOpt[ipt];
+    phiMinOpt[ipt] = -nBinPhyOpt[ipt]*binWidthPhyOpt[ipt] - binWidthPhyOpt[ipt]/2.;
+    phiMaxOpt[ipt] =  nBinPhyOpt[ipt]*binWidthPhyOpt[ipt] + binWidthPhyOpt[ipt]/2.;
+    nBinPhiOpt[ipt] = (phiMaxOpt - phiMinOpt) / binWidthPhyOpt[ipt] + 0.1;
+  }
+  // Optimized binning in azimuth
+  // -------------------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------------------
+  // CLEAN UP THE DIST
+  //for( int ipid=0; ipid<nParticleType; ipid++ )
+  {
+    for( int iy=0; iy<nBinRap; iy++ )
+      for( int iphi=0; iphi<nBinPhi-1; iphi++ ) // The both end bins are the same bin
+      {
+        int ipt_wipe = 0;
+        double val_bk = hist->GetBinContent( ipt_start+1, iy+1, iphi+1 );
+        for( int ipt=ipt_start+1; ipt<nBinPt; ipt++ )
+        {
+          double val_inc = hist->GetBinContent( ipt+1, iy+1, iphi+1 );
+          if( 3*val_bk < val_inc ) { ipt_wipe=ipt; break; }
+          else val_bk = val_inc;
+        }
+
+        for( int ipt=ipt_wipe; ipt_wipe && ipt<nBinPt; ipt++ )
+        {
+          hist->SetBinContent( ipt+1, iy+1, iphi+1, 0. );
+          hist->SetBinError( ipt+1, iy+1, iphi+1, 0. );
+        }
+      }
+  }
+  // CLEAN UP THE DIST
+  // -------------------------------------------------------------------------------------
+
   auto fModel = new TF2( "fModel", modelFunction, ptMin, ptMax, phiMin, phiMax, 4 );
-  auto hFit = new TH2D( "hFit", "", nBinPt, ptMin, ptMax, nBinPhi, phiMin, phiMax );
 
   auto hh = new TH2D( "hh", "", nBinRap, yyMin, yyMax, 100, -2, 2 );
-
-  auto gtest = new TGraph();
 
   // Prepare parameters, (ANORM-Max. d3N{ipid,y}, vx-px/m, 
   // Temp-{TempIn-px2/m, TempOut-py2/m}, t2)
 
   //For every rapidity bins, (considering only one particle)
-  for( int iy=0; iy<nBinRap; iy++ )
+  //for( int iy=0; iy<nBinRap; iy++ )
+  for( int iy=25; iy<26; iy++ )
   {
-    hFit->Reset();
-
     rap = hist->GetYaxis()->GetBinCenter( iy+1 );
 
     double weight  = 0.;
@@ -96,10 +150,15 @@ void fit_data()
     double d2Nmax = 0.; // This is the first parameter, ANORM
     for( int ip=0; ip<nBinPt; ip++ )
     {
+      if( bUseOptAzi ) binWidthPhy = binWidthPhyOpt[ip];
       double pt = hist->GetXaxis()->GetBinCenter( ip+1 );
-      for( int iphi=0; iphi<nBinPhi-1; iphi++ ) // Note the both end bins are compensated each other
+
+      int startBin = -nBinPhyOpt[ip] + nBinPhy+1 - 1;
+      int endBin   =  nBinPhyOpt[ip] + nBinPhy+1 - 1;
+      for( int iphi=startBin; iphi<endBin; iphi++ ) // Note the both end bins are compensated each other
       {
         double phi = hist->GetZaxis()->GetBinCenter( iphi+1 );
+        if( bUseOptAzi ) phi = (iphi - nBinPhy-1) * binWidthPhy;
 
         double content = hist->GetBinContent( ip+1, iy+1, iphi+1 );
         if( content < dn_cut ) 
@@ -111,7 +170,7 @@ void fit_data()
         if( d2Nmax < content ) d2Nmax = content;
 
         // Normalize back to count
-        content = hist->GetBinContent( ip+1, iy+1, iphi+1 )*pt*binWidthPt*binWidthRap*binWidthPhy ;
+        content = hist->GetBinContent( ip+1, iy+1, iphi+1 )*pt*binWidthPt[4]*binWidthRap*binWidthPhy ;
 
         double px  = pt*TMath::Cos( phi );
         double py  = pt*TMath::Sin( phi );
@@ -145,38 +204,48 @@ void fit_data()
 
     // Now the parameters are: d2Nmax, vx_src, temp, t2 for fitting d2N(pt, phi)
 
+    auto gFit = new TGraph2DErrors();
+    gFit->SetName( Form("graph_rap_%d", iy) );
     for( int ip=0; ip<nBinPt; ip++ )
     {
-      for( int iphi=0; iphi<nBinPhi; iphi++ )
+      double pt = (ip+0.5) * binWidthPt[4];
+
+      int startBin = -nBinPhyOpt[ip] + nBinPhy+1 - 1;
+      int endBin   =  nBinPhyOpt[ip] + nBinPhy+1 - 1;
+      for( int iphi=startBin; iphi<=endBin; iphi++ )
       {
+        double phi = (iphi+0.5 -(nBinPhy+1)) * binWidthPhyOpt[ip];
+
         double val = hist->GetBinContent( ip+1, iy+1, iphi+1 );
         double err = hist->GetBinError( ip+1, iy+1, iphi+1 );
         if( dn_cut < val ) 
         {
-          hFit->SetBinContent( ip+1, iphi+1, val );
-          hFit->SetBinError( ip+1, iphi+1, err );
+          gFit->SetPoint( gFit->GetN(), pt, phi, val );
+          gFit->SetPointError( gFit->GetN()-1, pt, phi, err );
         }
-        else 
+        else
         {
-          hFit->SetBinContent( ip+1, iphi+1, 0 );
-          hFit->SetBinError( ip+1, iphi+1, 0 );
+          continue;
+
+          gFit->SetPoint( gFit->GetN(), pt, phi, 0 );
+          gFit->SetPointError( gFit->GetN()-1, pt, phi, 0 );
         }
 
       }
     }
 
-    if( hFit->GetEntries()==0 ) continue;
+    if( gFit->GetN()==0 ) continue;
 
 
 
     cout << "RAP: " << rap << endl;
     cout << "PARS: " << d2Nmax << " " << vx_src << " " << temp << " " << t2 << endl;
     fModel->SetParameters( d2Nmax, vx_src, temp, t2 ); // Rapidity par for efficiency calc
-    //hFit->Fit( fModel, "QN", "" );
-    hFit->Fit( fModel, "N", "" );
+    gFit->Fit( fModel, "QN", "" );
+    gFit->Fit( fModel, "N", "" );
     cout << endl;
 
-    //if( iy==12 )
+    //if( 0.49<rap && rap<0.51 )
     {
       auto ge = new TGraphErrors();
       auto gf = new TGraph();
@@ -184,11 +253,13 @@ void fit_data()
 
       for( int ip=0; ip<nBinPt; ip++ )
       {
+        int binPhi  = nBinPhy+1 - nBinPhyOpt[ip]; // Centered bin = zero bin
+        int binZero = nBinPhy+1 + 0; // Centered bin = zero bin
         double pt = hist->GetXaxis()->GetBinCenter( ip+1 );
-        double p1 = hist->GetBinContent( ip+1, iy+1, hist->GetZaxis()->FindBin(0.) );
-        double p2 = hist->GetBinContent( ip+1, iy+1, hist->GetZaxis()->FindBin(-TMath::Pi()) );
-        double p1Err = hist->GetBinError( ip+1, iy+1, hist->GetZaxis()->FindBin(0.) );
-        double p2Err = hist->GetBinError( ip+1, iy+1, hist->GetZaxis()->FindBin(-TMath::Pi()) );
+        double p1 = hist->GetBinContent( ip+1, iy+1, binZero );
+        double p2 = hist->GetBinContent( ip+1, iy+1, binPhi );
+        double p1Err = hist->GetBinError( ip+1, iy+1, binZero );
+        double p2Err = hist->GetBinError( ip+1, iy+1, binPhi );
 
         ge->SetPoint( ge->GetN(),  pt/mass, p1 );
         ge->SetPointError( ge->GetN()-1, 0, p1Err );
@@ -202,24 +273,19 @@ void fit_data()
           double pt  = std::abs(px);
           double phi = px>0. ? 0 : TMath::Pi();
           double p1 = fModel->Eval( pt, phi );
-          //p1 = ThermalDist( pt, phi, d2Nmax, vx_src, temp, t2 );
 
           gf->SetPoint( gf->GetN(), px/mass, p1 );
-          //gf1->SetPoint( gf->GetN(), px/mass, 
-          //ThermalDist(pt, phi, fModel->GetParameter(1), fModel->GetParameter(2), fModel->GetParameter(3), fModel->GetParameter(4)) );
         }
 
       ge->SetMarkerStyle( 24 );
       ge->SetMarkerColor( kRed );
       gf->SetLineColor( kRed );
-      //gf1->SetLineColor( kBlue );
 
       auto c = new TCanvas();
       c->SetLogy();
       ge->SetTitle( Form("rap = %.4lf", rap) );
       ge->Draw( "APE" );
       gf->Draw( "Lsame" );
-      //gf1->Draw( "Lsame" );
     }
 
   }

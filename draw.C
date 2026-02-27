@@ -1,5 +1,6 @@
 TString particleName[6] = { "proton", "deuteron", "triton", "3He", "alpha", "neutron" };
 
+bool bUseOptAzi = 1;
 bool saveFigure = 1;
 
 bool drawFlow = 1;
@@ -23,7 +24,7 @@ auto gpa = new TGraph( 21, xpa, ypa );
 // nPidTest: pid number             for preview of the restored distribution
 // nPtTest: number of pt bin        for preview of the restored distribution
 // nRapTest: number of rapidity bin for preview of the restored distribution
-void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
+void draw( int numUp=0, int nPidTest=4, int nPtTest=1, int nRapTest=18 )
 {
   static const int nParticleType = 5;
 
@@ -32,30 +33,85 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
   auto file_exp = new TFile( "/home/Symmetry/jhpark/spirit/ExpFlowData_Sn108_midcentral_opt.root", "READ" );
 
   TH3D* hist_pt_rap_phi_real[nParticleType];
-  TH3D* hist_pt_rap_phi_meas_thefirst[nParticleType];
+  TH3D* hist_pt_rap_phi_meas[nParticleType];
   TH3D* hist_pt_rap_phi_rest[nParticleType];
 
   for( int ipid=0; ipid<nParticleType; ipid++ ) hist_pt_rap_phi_real[ipid] = (TH3D*) file1->Get( Form("hist_pt_rap_phi_real_%s", particleName[ipid].Data()) );
   if( expdata ) 
     for( int ipid=0; ipid<nParticleType; ipid++ ) hist_pt_rap_phi_real[ipid] = (TH3D*) file_exp->Get( Form("hist_pt_rap_phi_corr_%s", particleName[ipid].Data()) );
-  for( int ipid=0; ipid<nParticleType; ipid++ ) hist_pt_rap_phi_meas_thefirst[ipid] = (TH3D*) file1->Get( Form("hist_pt_rap_phi_meas_%s", particleName[ipid].Data()) );
+  for( int ipid=0; ipid<nParticleType; ipid++ ) hist_pt_rap_phi_meas[ipid] = (TH3D*) file1->Get( Form("hist_pt_rap_phi_meas_%s", particleName[ipid].Data()) );
   for( int ipid=0; ipid<nParticleType; ipid++ ) hist_pt_rap_phi_rest[ipid] = (TH3D*) file1->Get( Form("hist_pt_rap_phi_rest_%s", particleName[ipid].Data()) );
 
-  int nBinPt = hist_pt_rap_phi_real[0]->GetNbinsX();
-  double binWidthPt = hist_pt_rap_phi_real[0]->GetXaxis()->GetBinWidth(1);
-  double ptMin = hist_pt_rap_phi_real[0]->GetXaxis()->GetXmin();
-  double ptMax = hist_pt_rap_phi_real[0]->GetXaxis()->GetXmax();
+  const int nBinPtMax = 25;
+  int nBinPt = hist_pt_rap_phi_meas[0]->GetNbinsX();
+  double binWidthPt = hist_pt_rap_phi_meas[0]->GetXaxis()->GetBinWidth(1);
+  double ptMin = hist_pt_rap_phi_meas[0]->GetXaxis()->GetXmin();
+  double ptMax = hist_pt_rap_phi_meas[0]->GetXaxis()->GetXmax();
 
-  int nBinRap = hist_pt_rap_phi_real[0]->GetNbinsY();
-  double binWidthY = hist_pt_rap_phi_real[0]->GetYaxis()->GetBinWidth(1);
-  double yyMin = hist_pt_rap_phi_real[0]->GetYaxis()->GetXmin();
-  double yyMax = hist_pt_rap_phi_real[0]->GetYaxis()->GetXmax();
+  int nBinRap = hist_pt_rap_phi_meas[0]->GetNbinsY();
+  double binWidthY = hist_pt_rap_phi_meas[0]->GetYaxis()->GetBinWidth(1);
+  double yyMin = hist_pt_rap_phi_meas[0]->GetYaxis()->GetXmin();
+  double yyMax = hist_pt_rap_phi_meas[0]->GetYaxis()->GetXmax();
 
-  int nBinPhi = hist_pt_rap_phi_real[0]->GetNbinsZ();
-  double binWidthPhi = hist_pt_rap_phi_real[0]->GetZaxis()->GetBinWidth(1);
-  double phiMin = hist_pt_rap_phi_real[0]->GetZaxis()->GetXmin();
-  double phiMax = hist_pt_rap_phi_real[0]->GetZaxis()->GetXmax();
+  int nBinPhi = hist_pt_rap_phi_meas[0]->GetNbinsZ();
+  double binWidthPhy = hist_pt_rap_phi_meas[0]->GetZaxis()->GetBinWidth(1);
+  double phiMin = hist_pt_rap_phi_meas[0]->GetZaxis()->GetXmin();
+  double phiMax = hist_pt_rap_phi_meas[0]->GetZaxis()->GetXmax();
   int nBinPhi_half = ( nBinPhi - 1 )/2;
+  int nBinPhy = 12;
+
+  // -------------------------------------------------------------------------------------
+  // Optimized binning in azimuth
+  int nBinPhyOpt[nBinPtMax] = {0};
+  double binWidthPhyOpt[nBinPtMax] = {0};
+  double phiMinOpt[nBinPtMax] = {0};
+  double phiMaxOpt[nBinPtMax] = {0};
+  int nBinPhiOpt[nBinPtMax] = {0};
+
+  //for( int ipt=0; ipt<nBinPtMax; ipt ++ )
+  int ipt_start = 1;
+  for( int ipt=nBinPtMax-1; 0<=ipt; ipt-- )
+  {
+    int nphy = TMath::Nint( .5*TMath::Pi()*((ipt+1)+(ipt+1)-1) ); // ipt -> ipt+1 for index prob
+    nphy = TMath::Min( nphy, nBinPhy );
+    //nphy = nBinPhy; // Test
+
+    if( nphy==nBinPhy ) ipt_start = ipt;
+    nBinPhyOpt[ipt] = nphy;
+    binWidthPhyOpt[ipt] = TMath::Pi() / nBinPhyOpt[ipt];
+    phiMinOpt[ipt] = -nBinPhyOpt[ipt]*binWidthPhyOpt[ipt] - binWidthPhyOpt[ipt]/2.;
+    phiMaxOpt[ipt] =  nBinPhyOpt[ipt]*binWidthPhyOpt[ipt] + binWidthPhyOpt[ipt]/2.;
+    nBinPhiOpt[ipt] = (phiMaxOpt - phiMinOpt) / binWidthPhyOpt[ipt] + 0.1;
+  }
+  // Optimized binning in azimuth
+  // -------------------------------------------------------------------------------------
+
+
+  // -------------------------------------------------------------------------------------
+  // CLEAN UP THE DIST
+  for( int ipid=0; ipid<nParticleType; ipid++ )
+  {
+    for( int iy=0; iy<nBinRap; iy++ )
+      for( int iphi=0; iphi<nBinPhi-1; iphi++ ) // The both end bins are the same bin
+      {
+        int ipt_wipe = 0;
+        double val_bk = hist_pt_rap_phi_rest[ipid]->GetBinContent( ipt_start+1, iy+1, iphi+1 );
+        for( int ipt=ipt_start+1; ipt<nBinPt; ipt++ )
+        {
+          double val_inc = hist_pt_rap_phi_rest[ipid]->GetBinContent( ipt+1, iy+1, iphi+1 );
+          if( 3*val_bk < val_inc ) { ipt_wipe=ipt; break; }
+          else val_bk = val_inc;
+        }
+
+        for( int ipt=ipt_wipe; ipt_wipe && ipt<nBinPt; ipt++ )
+        {
+          hist_pt_rap_phi_rest[ipid]->SetBinContent( ipt+1, iy+1, iphi+1, 0. );
+          hist_pt_rap_phi_rest[ipid]->SetBinError( ipt+1, iy+1, iphi+1, 0. );
+        }
+      }
+  }
+  // CLEAN UP THE DIST
+  // -------------------------------------------------------------------------------------
 
 
   double rapTest = -(0.2 + 0.001);
@@ -69,19 +125,38 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
   auto g1 = new TGraph( hist_pt_rap_phi_real[nPidTest]->ProjectionZ("real_ang", nPtTest+1, nPtTest+1, nRapTest+1, nRapTest+1) );
   if( expdata ) 
   {
+    int nRapTestExp = hist_pt_rap_phi_real[0]->GetYaxis()->FindBin( rapTest ) - 1;
     auto hist_corr = (TH3D*) file_exp->Get( Form("hist_pt_rap_phi_corr_%s", particleName[nPidTest].Data()) );
-    g1 = new TGraph( hist_corr->ProjectionZ("corr_ang", nPtTest+1, nPtTest+1, nRapTest+1, nRapTest+1) );
+    g1 = new TGraph( hist_corr->ProjectionZ("corr_ang", nPtTest+1, nPtTest+1, nRapTestExp+1, nRapTestExp+1) );
   }
-  auto g2 = new TGraphErrors( hist_pt_rap_phi_meas_thefirst[nPidTest]->ProjectionZ("esti_ang", nPtTest+1, nPtTest+1, nRapTest+1, nRapTest+1) );
+  auto g2 = new TGraphErrors( hist_pt_rap_phi_meas[nPidTest]->ProjectionZ("esti_ang", nPtTest+1, nPtTest+1, nRapTest+1, nRapTest+1) );
   auto g3 = new TGraphErrors( hist_pt_rap_phi_rest[nPidTest]->ProjectionZ("rest_ang", nPtTest+1, nPtTest+1, nRapTest+1, nRapTest+1) );
   cout << g1->GetMean(2) << " " << g2->GetMean(2) << " " << g3->GetMean(2) << endl;
 
+  double g1Cnt = 0;
   double g1Mean = 0;
-  for( int i=0; i<g1->GetN()-1; i++ ) g1Mean += g1->GetY()[i]/(g1->GetN()-1);
+  for( int i=0; i<g1->GetN()-1; i++ ) 
+    if( g1->GetY()[i]!=0 ) 
+    {
+      g1Mean += g1->GetY()[i];
+      g1Cnt++;
+    }
+  double g2Cnt = 0;
   double g2Mean = 0;
-  for( int i=0; i<g2->GetN()-1; i++ ) g2Mean += g2->GetY()[i]/(g2->GetN()-1);
+  for( int i=0; i<g2->GetN()-1; i++ ) 
+    if( g2->GetY()[i]!=0 ) 
+    {
+      g2Mean += g2->GetY()[i];
+      g2Cnt++;
+    }
+  double g3Cnt = 0;
   double g3Mean = 0;
-  for( int i=0; i<g3->GetN()-1; i++ ) g3Mean += g3->GetY()[i]/(g3->GetN()-1);
+  for( int i=0; i<g3->GetN()-1; i++ ) 
+    if( g3->GetY()[i]!=0 ) 
+    {
+      g3Mean += g3->GetY()[i];
+      g3Cnt++;
+    }
 
   for( int i=0; i<g2->GetN(); i++ ) g2->SetPointError(i, 0, g2->GetEY()[i]);
   for( int i=0; i<g3->GetN(); i++ ) g3->SetPointError(i, 0, g3->GetEY()[i]);
@@ -90,10 +165,15 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
   double val3 = g3Mean;
   double val = val3/val1;
   for( int i=0; i<g1->GetN(); i++ ) g1->SetPoint( i, g1->GetX()[i], g1->GetY()[i]*val );
+  //for( int i=0; i<g1->GetN(); i++ ) g1->SetPoint( i, g1->GetX()[i]/binWidthPhy*binWidthPhyOpt[nPtTest], g1->GetY()[i]*val );
 
   double val2 = g2Mean;
   val = val3/val2;
-  for( int i=0; i<g2->GetN(); i++ ) g2->SetPoint( i, g2->GetX()[i], g2->GetY()[i]*val );
+  for( int i=0; i<g2->GetN(); i++ ) g2->SetPoint( i, g2->GetX()[i]/binWidthPhy*binWidthPhyOpt[nPtTest], g2->GetY()[i]*val );
+  for( int i=0; i<g3->GetN(); i++ ) g3->SetPoint( i, g3->GetX()[i]/binWidthPhy*binWidthPhyOpt[nPtTest], g3->GetY()[i] );
+
+  for( int i=0; i<g2->GetN(); i++ ) if( g2->GetY()[i]==0. ) g2->RemovePoint(i--);
+  for( int i=0; i<g3->GetN(); i++ ) if( g3->GetY()[i]==0. ) g3->RemovePoint(i--);
 
   g1->SetMarkerColor( kRed );
   g2->SetMarkerColor( kGreen );
@@ -132,6 +212,13 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
 
 
 
+  auto ccc = new TCanvas();
+  hist_pt_rap_phi_rest[nPidTest]->Project3D("XY")->Draw("colz");
+  if( saveFigure ) ccc->SaveAs( Form("~/public_html/files/deblurring_spirit_eff/new_eff/twod_figure.png") );
+
+
+
+
   if( drawFlow )
   {
     double y_cm = 0.372156;
@@ -156,6 +243,7 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
 
     auto cc = new TCanvas();
 
+    // Let's keep this since we never changed the binning of exp data. 
     auto gReal1 = new TGraphErrors();                                                                                                                                                                                                                 
     auto gReal2 = new TGraphErrors();
     auto gReal3 = new TGraphErrors();
@@ -165,13 +253,21 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
       double thisV1 = 0;
       double thisV2 = 0;
       double thisV3 = 0;
-      for( int imom=momMin; imom<momMax; imom++ )
+      for( int ipt=momMin; ipt<momMax; ipt++ )
       {
-        for( int iphi=1; iphi<nBinPhi; iphi++ )
+        int startBin = 0;
+        int endBin   = nBinPhi-1;
+        for( int iphi=startBin; iphi<endBin; iphi++ )
         {
-          //if( hist_pt_rap_phi_real[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) < 0.15 ) continue;
-          double val = hist_pt_rap_phi_real[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) * hist_pt_rap_phi_real[nPidTest]->GetXaxis()->GetBinCenter( imom+1 ) * binWidthPt * binWidthRap * binWidthPhy;
+          //if( hist_pt_rap_phi_real[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) < 0.15 ) continue;
+          double val = hist_pt_rap_phi_real[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_real[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhy;
           double phi = hist_pt_rap_phi_real[nPidTest]->GetZaxis()->GetBinCenter( iphi+1 );
+
+          if( 0 && bUseOptAzi )
+          {
+            val = hist_pt_rap_phi_real[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_real[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhyOpt[ipt];
+            phi = (iphi-nBinPhy) * binWidthPhyOpt[ipt];
+          }
           weight += val;
 
           thisV1 += TMath::Cos(    phi )*val;
@@ -223,13 +319,28 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
       double thisV1 = 0;
       double thisV2 = 0;
       double thisV3 = 0;
-      for( int imom=momMin; imom<momMax; imom++ )
+      for( int ipt=momMin; ipt<momMax; ipt++ )
       {
-        for( int iphi=1; iphi<nBinPhi; iphi++ )
+        int startBin = 0;
+        int endBin   = nBinPhi-1;
+        if( bUseOptAzi )
         {
-          if( hist_pt_rap_phi_meas_thefirst[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) < 0.15 ) continue;
-          double val = hist_pt_rap_phi_meas_thefirst[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) * hist_pt_rap_phi_meas_thefirst[nPidTest]->GetXaxis()->GetBinCenter( imom+1 ) * binWidthPt * binWidthRap * binWidthPhy;
-          double phi = hist_pt_rap_phi_meas_thefirst[nPidTest]->GetZaxis()->GetBinCenter( iphi+1 );
+          startBin = (nBinPhy+1) - nBinPhyOpt[ipt] - 1; // Start bin - 1 (index prob)
+          endBin   = (nBinPhy+1) + nBinPhyOpt[ipt] - 1; // End bin - 1 (index prob)
+        }
+        for( int iphi=startBin; iphi<endBin; iphi++ )
+        {
+          if( hist_pt_rap_phi_meas[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) < 0.15 ) continue;
+          double val = hist_pt_rap_phi_meas[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_meas[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhy;
+          double phi = hist_pt_rap_phi_meas[nPidTest]->GetZaxis()->GetBinCenter( iphi+1 );
+
+          if( bUseOptAzi )
+          {
+            val = hist_pt_rap_phi_meas[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_meas[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhyOpt[ipt];
+            phi = (iphi-nBinPhy) * binWidthPhyOpt[ipt];
+            if( irap==12 && ipt==2 ) cout << phi << endl;
+          }
+
           weight += val;
 
           thisV1 += TMath::Cos(    phi )*val;
@@ -241,7 +352,7 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
       thisV2 /= weight;
       thisV3 /= weight;
 
-      double rap = hist_pt_rap_phi_meas_thefirst[nPidTest]->GetYaxis()->GetBinCenter( irap+1 );
+      double rap = hist_pt_rap_phi_meas[nPidTest]->GetYaxis()->GetBinCenter( irap+1 );
       if( ystar ) rap *= y_cm;
 
       if( weight != 0 ) gMeas1->SetPoint( gMeas1->GetN(), rap, thisV1 );
@@ -260,13 +371,27 @@ void draw( int numUp=0, int nPidTest=4, int nPtTest=2, int nRapTest=18 )
       double thisV1 = 0;
       double thisV2 = 0;
       double thisV3 = 0;
-      for( int imom=momMin; imom<momMax; imom++ )
+      for( int ipt=momMin; ipt<momMax; ipt++ )
       {
-        for( int iphi=1; iphi<nBinPhi; iphi++ )
+        int startBin = 0;
+        int endBin   = nBinPhi-1;
+        if( bUseOptAzi )
         {
-          if( hist_pt_rap_phi_rest[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) < 0.15 ) continue;
-          double val = hist_pt_rap_phi_rest[nPidTest]->GetBinContent( imom+1, irap+1, iphi+1 ) * hist_pt_rap_phi_rest[nPidTest]->GetXaxis()->GetBinCenter( imom+1 ) * binWidthPt * binWidthRap * binWidthPhy;
+          startBin = (nBinPhy+1) - nBinPhyOpt[ipt] - 1; // Start bin - 1 (index prob)
+          endBin   = (nBinPhy+1) + nBinPhyOpt[ipt] - 1; // End bin - 1 (index prob)
+        }
+        for( int iphi=startBin; iphi<endBin; iphi++ )
+        {
+          if( hist_pt_rap_phi_rest[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) < 0.15 ) continue;
+          double val = hist_pt_rap_phi_rest[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_rest[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhy;
           double phi = hist_pt_rap_phi_rest[nPidTest]->GetZaxis()->GetBinCenter( iphi+1 );
+
+          if( bUseOptAzi )
+          {
+            val = hist_pt_rap_phi_rest[nPidTest]->GetBinContent( ipt+1, irap+1, iphi+1 ) * hist_pt_rap_phi_rest[nPidTest]->GetXaxis()->GetBinCenter( ipt+1 ) * binWidthPt * binWidthRap * binWidthPhyOpt[ipt];
+            phi = (iphi-nBinPhy) * binWidthPhyOpt[ipt];
+          }
+
           weight += val;
 
           thisV1 += TMath::Cos(    phi )*val;

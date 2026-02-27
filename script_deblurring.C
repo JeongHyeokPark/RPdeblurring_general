@@ -21,6 +21,7 @@ int main( int argc, char** argv )
   bool IsCentral = 0;
   bool fUseTotalQ= 0;
   bool fOptimal  = 0;
+  bool fOptAzi   = 0;
 
   TString dummy;
   TString inputFileName = argv[1];
@@ -46,6 +47,8 @@ int main( int argc, char** argv )
     iFile >> dummy >> fUseTotalQ;
     if( iFile.eof() ) break;
     iFile >> dummy >> fOptimal;
+    if( iFile.eof() ) break;
+    iFile >> dummy >> fOptAzi;
     if( iFile.eof() ) break;
 
     cout << "nEvents : " << nEvents << endl;
@@ -77,7 +80,15 @@ int main( int argc, char** argv )
 
 
   SimulationTools doSimulation;
+  doSimulation.SetOptimizedAzimuth( fOptAzi );
   doSimulation.SetCollisionProperties( proj_Z, proj_A, targ_Z, targ_A, ke_beam );
+  doSimulation.SetUseOptimal( fOptimal );
+
+  // Efficiency file needs to be assigned here to construct TM
+  TString effFileName = Form( "/home/jhpark/work/deblurring_spirit/merging/efficiency/eff_Sn%d_%s.root", proj_A, collisionEvent.Data() );
+  auto efficiencyFile = new TFile( effFileName, "READ" ); // Like Exp
+  doSimulation.EnableEfficiency();
+  doSimulation.SetEfficiencyFile( efficiencyFile );
 
   doSimulation.PrepareRLDeblurring( file );
 
@@ -98,6 +109,7 @@ int main( int argc, char** argv )
   // To save total Q vector direction distribution
   TH2D* hist_totalq = (TH2D*) file->Get( "hist_totalq" );
   doSimulation.SetTotalQMatrix( hist_totalq );
+  doSimulation.ConstructTMfromQ();
   // To save total Q vector direction distribution
 
   // RL deblurring w/ the current blurring matrix
@@ -108,11 +120,8 @@ int main( int argc, char** argv )
   {
     doSimulation.UpdateInternalDistribution();
 
-    // Setup optimal weight flag
-    doSimulation.SetUseOptimal( fOptimal );
     // Calculate optimal weight
     doSimulation.SetupOptimal();
-
 
 
     // Set flag not to update restored distribution in saving data
