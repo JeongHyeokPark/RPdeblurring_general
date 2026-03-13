@@ -30,7 +30,7 @@ class SimulationTools {
 
     void SetNumberOfEvents( int val ) { fNumberOfEvents = val; };
     void SetCollisionProperties( int proj_Z, int proj_A, int targ_Z, int targ_A, double collisionE );
-    void EnableRandomReactionPlane() { fRandomPhi = true; };
+    void EnableRandomReactionPlane() { fRandomRP = true; };
     void SetOptimizedAzimuth( bool val ) { bUseOptAzi = val; };
 
     void EnableEfficiency() { fEfficiencyMode = true; };
@@ -77,8 +77,6 @@ class SimulationTools {
 
     long fSeed = 1;
 
-    int nEvents = 0;
-
     static const int nBinPtMax = 25;
     int ipt_start = 1;
     int nBinPt = -1;
@@ -115,7 +113,7 @@ class SimulationTools {
 
     bool   fUpdateRestored = 1;
     int    fNumberOfEvents = -1;
-    bool   fRandomPhi = false;
+    bool   fRandomRP = false;
     bool   fEfficiencyMode = false;
     TEfficiency* fEfficiency = nullptr;
     TFile* fEfficiencyFile = nullptr;
@@ -180,6 +178,7 @@ class SimulationTools {
     double fLambda = 0.007;
     double fLambda_org = -1;
     int modulo( int a, int b ) { return ((a % b) + b) % b; }
+    double modulo( double a, double b ) { return std::fmod(std::fmod(a, b) + b, b); }
 
 };
 
@@ -238,8 +237,6 @@ void SimulationTools::RandomizeRegularization()
 
 int SimulationTools::Init()
 {
-  nEvents = 0;
-
   if( fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) cout << "Please set model or TH3D class as an input to emit the particles" << endl;
   if( fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) return -1;
 
@@ -515,7 +512,7 @@ void SimulationTools::CreateTheFirstData()
     double particleQx[fMultiMax] = {0}; double particleQy[fMultiMax] = {0};
 
     double phi_rp = 0.;
-    if( fRandomPhi ) phi_rp = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
+    if( fRandomRP ) phi_rp = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
 
     if( fDataTree ) fDataTree->GetEntry( iEvent );
     CallParticle();
@@ -714,8 +711,7 @@ void SimulationTools::CreateTheFirstData()
       else phiq = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
 
       double phi_diff = phiq - phi_rp;
-      if( phi_diff < -TMath::Pi() ) phi_diff = phi_diff + TMath::TwoPi();
-      if( phi_diff >  TMath::Pi() ) phi_diff = phi_diff - TMath::TwoPi();
+      phi_diff = modulo( phi_diff+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
       TVector3 mom( particlePx[iTrack], particlePy[iTrack], particlePz[iTrack] );
       double pt = mom.Pt();
@@ -723,21 +719,20 @@ void SimulationTools::CreateTheFirstData()
       double normalized_rapidity = particleY[iTrack];
 
       int ipid = particleID[iTrack];
-      double particlePhi_lab = mom.Phi();
-      double particlePhi_rel = particlePhi_lab - phiq;
-      if( particlePhi_rel < -TMath::Pi() ) particlePhi_rel = particlePhi_rel + TMath::TwoPi();
-      if( particlePhi_rel >  TMath::Pi() ) particlePhi_rel = particlePhi_rel - TMath::TwoPi();
+      double phi_lab = mom.Phi();
+      double phi_rel_q = phi_lab - phiq;
+      phi_rel_q = modulo( phi_rel_q+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
       if( bUseOptAzi )
       {
         int iBinPt = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt );
         int iBinRap = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity );
-        int iBinPhi = TMath::Nint( particlePhi_rel/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
+        int iBinPhi = TMath::Nint( phi_rel_q/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
         double val = hist_pt_rap_phi_meas[ipid]->GetBinContent( iBinPt, iBinRap, iBinPhi );
         hist_pt_rap_phi_meas[ipid]->SetBinContent( iBinPt, iBinRap, iBinPhi, val+1 ); // Fill method for uneven binning
       }
       else
-        hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, particlePhi_rel );
+        hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, phi_rel_q );
 
 
 
@@ -921,8 +916,7 @@ void SimulationTools::CreateTheFirstData()
               double phi_real = ( ireal-nBinPhy )*localBinWidthPhy;
               double phi_meas = ( imeas-nBinPhy )*localBinWidthPhy;
               double phi_diff = phi_meas - phi_real;
-              if( phi_diff < -TMath::Pi() ) phi_diff = phi_diff + TMath::TwoPi();
-              if( phi_diff >  TMath::Pi() ) phi_diff = phi_diff - TMath::TwoPi();
+              phi_diff = modulo( phi_diff+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
               int thisBin = TMath::Nint( phi_diff/localBinWidthPhy ) + (nBinPhy+1);
               double val = hist_central->GetBinContent( thisBin );
               val *= fEffCoarse; // Coarse efficiency
@@ -964,7 +958,7 @@ void SimulationTools::SampleAndMakeTM()
     double particleQx[fMultiMax] = {0}; double particleQy[fMultiMax] = {0};
 
     double phi_rp = 0.;
-    if( fRandomPhi ) phi_rp = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
+    if( fRandomRP ) phi_rp = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
 
     CallParticle();
     int nTracks = fVector->size();
@@ -1101,9 +1095,6 @@ void SimulationTools::SampleAndMakeTM()
     } // loop end ptcle type & filling of event completed
 
 
-    nEvents++;
-
-
     if( fUseTotalQ )
     {
       // We accumulate the reaction plane direction with total Q vector, not omitting particles to be analyzed
@@ -1111,9 +1102,7 @@ void SimulationTools::SampleAndMakeTM()
       if( qx_event!=0. && qy_event!=0. ) phiq = TMath::ATan2( qy_event, qx_event );
       else phiq = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
 
-      if( phiq < -TMath::Pi() ) phiq = phiq + TMath::TwoPi();
-      if( phiq >  TMath::Pi() ) phiq = phiq - TMath::TwoPi();
-
+      phiq = modulo( phiq+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi(); // Shouldn't be used?
 
       double phiqq = phiq;
       double phi_save_rp = phi_rp;
@@ -1140,8 +1129,7 @@ void SimulationTools::SampleAndMakeTM()
         else phiq = gRandom->Uniform( -TMath::Pi(), TMath::Pi() );
 
         double phi_diff = phiq - phi_rp;
-        if( phi_diff < -TMath::Pi() ) phi_diff = phi_diff + TMath::TwoPi();
-        if( phi_diff >  TMath::Pi() ) phi_diff = phi_diff - TMath::TwoPi();
+        phi_diff = modulo( phi_diff+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
         TVector3 mom( particlePx[iTrack], particlePy[iTrack], particlePz[iTrack] );
         double pt = mom.Pt();
@@ -1149,36 +1137,35 @@ void SimulationTools::SampleAndMakeTM()
         double normalized_rapidity = particleY[iTrack];
 
         int ipid = particleID[iTrack];
-        double particlePhi_lab = mom.Phi();
-        double particlePhi_rel = particlePhi_lab - phiq;
-        if( particlePhi_rel < -TMath::Pi() ) particlePhi_rel = particlePhi_rel + TMath::TwoPi();
-        if( particlePhi_rel >  TMath::Pi() ) particlePhi_rel = particlePhi_rel - TMath::TwoPi();
+        double phi_lab = mom.Phi();
+        double phi_rel_q = phi_lab - phiq;
+        phi_rel_q = modulo( phi_rel_q+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
         int iBinPt = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt );
         // Do we need this?
         if( bUseOptAzi )
         {
           int iBinRap = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( particleY[iTrack] );
-          int iBinPhi = TMath::Nint( particlePhi_rel/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
+          int iBinPhi = TMath::Nint( phi_rel_q/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
           double val = hist_pt_rap_phi_meas[ipid]->GetBinContent( iBinPt, iBinRap, iBinPhi );
           hist_pt_rap_phi_meas[ipid]->SetBinContent( iBinPt, iBinRap, iBinPhi, val+1 ); // Fill method for uneven binning
         }
         else
-          hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, particlePhi_rel );
+          hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, phi_rel_q );
 
         if( bUseOptAzi )
         {
-          double particlePhi_rel_real = particlePhi[iTrack];
-          if( TMath::Nint( particlePhi_rel_real/binWidthPhyOpt[iBinPt-1] ) == nBinPhyOpt[iBinPt-1] ) particlePhi_rel_real = particlePhi_rel_real - TMath::TwoPi();
-          if( TMath::Nint( particlePhi_rel/binWidthPhyOpt[iBinPt-1] ) == nBinPhyOpt[iBinPt-1] ) particlePhi_rel = particlePhi_rel - TMath::TwoPi();
+          double phi_rel_real_q = particlePhi[iTrack];
+          if( TMath::Nint( phi_rel_real_q/binWidthPhyOpt[iBinPt-1] ) == nBinPhyOpt[iBinPt-1] ) phi_rel_real_q = phi_rel_real_q - TMath::TwoPi();
+          if( TMath::Nint( phi_rel_q/binWidthPhyOpt[iBinPt-1] ) == nBinPhyOpt[iBinPt-1] ) phi_rel_q = phi_rel_q - TMath::TwoPi();
           if( !fUseTotalQ )
           {
             int ptBin = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt ) - 1;
             int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity ) - 1;
             if( 0<=ptBin && ptBin<nBinPt && 0<=rapBin && rapBin<nBinRap ) 
             {
-              int iBinReal = TMath::Nint( particlePhi_rel_real/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
-              int iBinMeas = TMath::Nint( particlePhi_rel     /binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
+              int iBinReal = TMath::Nint( phi_rel_real_q/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
+              int iBinMeas = TMath::Nint( phi_rel_q     /binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
               double val = hist_phi_diff[ipid][ptBin][rapBin]->GetBinContent( iBinReal, iBinMeas );
               hist_phi_diff[ipid][ptBin][rapBin]->SetBinContent( iBinReal, iBinMeas, val+1 ); // Increment of the bin
             }
@@ -1186,14 +1173,14 @@ void SimulationTools::SampleAndMakeTM()
         }
         else
         {
-          double particlePhi_rel_real = particlePhi[iTrack];
-          if( hist_pt_rap_phi_meas[ipid]->GetZaxis()->FindBin( particlePhi_rel_real ) == nBinPhi ) particlePhi_rel_real = particlePhi_rel_real - TMath::TwoPi();
-          if( hist_pt_rap_phi_meas[ipid]->GetZaxis()->FindBin( particlePhi_rel ) == nBinPhi ) particlePhi_rel = particlePhi_rel - TMath::TwoPi();
+          double phi_rel_real_q = particlePhi[iTrack];
+          if( hist_pt_rap_phi_meas[ipid]->GetZaxis()->FindBin( phi_rel_real_q ) == nBinPhi ) phi_rel_real_q = phi_rel_real_q - TMath::TwoPi();
+          if( hist_pt_rap_phi_meas[ipid]->GetZaxis()->FindBin( phi_rel_q ) == nBinPhi ) phi_rel_q = phi_rel_q - TMath::TwoPi();
           if( !fUseTotalQ )
           {
             int ptBin = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt ) - 1;
             int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity ) - 1;
-            if( 0<=ptBin && ptBin<nBinPt && 0<=rapBin && rapBin<nBinRap ) hist_phi_diff[ipid][ptBin][rapBin]->Fill( particlePhi_rel_real, particlePhi_rel );
+            if( 0<=ptBin && ptBin<nBinPt && 0<=rapBin && rapBin<nBinRap ) hist_phi_diff[ipid][ptBin][rapBin]->Fill( phi_rel_real_q, phi_rel_q );
           }
         }
 
@@ -1395,8 +1382,7 @@ void SimulationTools::CallParticle()
           pt = std::sqrt( PTK );
 
           double phi = phi_center + phi_width*(gRandom->Uniform() - 0.5);
-          if( phi < -TMath::Pi() ) phi += TMath::TwoPi();
-          if( phi >  TMath::Pi() ) phi -= TMath::TwoPi();
+          phi = modulo( phi+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
           double px   = pt * TMath::Cos( phi );
           double py   = pt * TMath::Sin( phi );
@@ -1537,18 +1523,15 @@ void SimulationTools::ConstructTMfromQ()
           {
             // Particle angle rel. to rp.
             double phi_meas = ( imeas-nBinPhy )*localBinWidthPhy + gRandom->Uniform(-localBinWidthPhy/2., localBinWidthPhy/2.);
-            if( phi_meas < -TMath::Pi() ) phi_meas = phi_meas + TMath::TwoPi();
-            if( phi_meas >  TMath::Pi() ) phi_meas = phi_meas - TMath::TwoPi();
+            phi_meas = modulo( phi_meas+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
             for( int imeas_rp=0; imeas_rp<nBinQphi-1; imeas_rp++ )
             {
               double phi_meas_rp = ( imeas_rp-nBinQphy )*binWidthQphy + gRandom->Uniform(-binWidthQphy/2., binWidthQphy/2.);
-              if( phi_meas_rp < -TMath::Pi() ) phi_meas_rp = phi_meas_rp + TMath::TwoPi();
-              if( phi_meas_rp >  TMath::Pi() ) phi_meas_rp = phi_meas_rp - TMath::TwoPi();
+              phi_meas_rp = modulo( phi_meas_rp+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
               double phi_lab = phi_meas + phi_meas_rp;
-              if( phi_lab < -TMath::Pi() ) phi_lab = phi_lab + TMath::TwoPi();
-              if( phi_lab >  TMath::Pi() ) phi_lab = phi_lab - TMath::TwoPi();
+              phi_lab = modulo( phi_lab+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
               // Sampling random pt and rap
               //double pt  = pt_center  + gRandom->Uniform( -binWidthPt[ipid]/2.,  binWidthPt[ipid]/2. );
@@ -1562,9 +1545,12 @@ void SimulationTools::ConstructTMfromQ()
               double pt = std::sqrt( PTK );
 
               double effi = 0.;
-              //int thisBin = 0;
-              //thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, rap, phi_lab*TMath::RadToDeg() );
-              //effi = fEfficiency_vector[ipid]->GetEfficiency( thisBin );
+              /*
+              // In case of using TEfficiency
+              int thisBin = 0;
+              thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, rap, phi_lab*TMath::RadToDeg() );
+              effi = fEfficiency_vector[ipid]->GetEfficiency( thisBin );
+              */
               effi = GetEfficiency( ipid, pt*1e+3, rap, phi_lab*TMath::RadToDeg() );
 
               if( effi!=0. )
@@ -1572,12 +1558,10 @@ void SimulationTools::ConstructTMfromQ()
                 for( int ireal_rp=0; ireal_rp<nBinQphi-1; ireal_rp++ )
                 {
                   double phi_real_rp = ( ireal_rp-nBinQphy )*binWidthQphy + gRandom->Uniform(-binWidthQphy/2., binWidthQphy/2.);
-                  if( phi_real_rp < -TMath::Pi() ) phi_real_rp = phi_real_rp + TMath::TwoPi();
-                  if( phi_real_rp >  TMath::Pi() ) phi_real_rp = phi_real_rp - TMath::TwoPi();
+                  phi_real_rp = modulo( phi_real_rp+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
                   double phi_real = phi_lab - phi_real_rp;
-                  if( phi_real < -TMath::Pi() ) phi_real = phi_real + TMath::TwoPi();
-                  if( phi_real >  TMath::Pi() ) phi_real = phi_real - TMath::TwoPi();
+                  phi_real = modulo( phi_real+TMath::Pi(), TMath::TwoPi() ) - TMath::Pi();
 
                   // Bin from center
                   int locPhiBin = TMath::Nint( phi_real/localBinWidthPhy );
