@@ -558,13 +558,13 @@ void SimulationTools::CreateTheFirstData()
 
 
       auto L = fVector->at( iTrack );
-      double normalized_rapidity = L.Rapidity();
+      double y0 = L.Rapidity();
 
       double pt = L.Pt();
       double mt = TMath::Sqrt( pt*pt + mass*mass );
 
       // L.Rapidity should be y0, yCM/yBeam
-      double rapidity = normalized_rapidity*y_cm;
+      double rapidity = y0*y_cm;
       double ylab = rapidity + y_cm;
       double particle_phi = L.Phi();
 
@@ -576,7 +576,7 @@ void SimulationTools::CreateTheFirstData()
       TVector3 mom( plab_x, plab_y, plab_z );
 
       // This should be consistent as in producing Exp Data.
-      particleY[iTrack] = normalized_rapidity;
+      particleY[iTrack] = y0;
 
       int ipid = particleID[iTrack];
       particlePhi[iTrack] = particle_phi;
@@ -594,9 +594,9 @@ void SimulationTools::CreateTheFirstData()
       // ---------------------------------------------------------------------------------
       // -------------------------- Considering over/under-flow --------------------------
       int iBinPt  = hist_pt_rap_phi_real[ipid]->GetXaxis()->FindBin( pt );
-      int iBinRap = hist_pt_rap_phi_real[ipid]->GetYaxis()->FindBin( normalized_rapidity );
+      int iBinRap = hist_pt_rap_phi_real[ipid]->GetYaxis()->FindBin( y0 );
       //int iBinPt  = pt / binWidthPt[ipid] + 1;
-      //int iBinRap = TMath::Nint( normalized_rapidity/binWidthRap ) + (nBinRap-1)/2 + 1;
+      //int iBinRap = TMath::Nint( y0/binWidthRap ) + (nBinRap-1)/2 + 1;
       if( nBinPt<iBinPt || nBinRap<iBinRap ) continue;
       // -------------------------- Considering over/under-flow --------------------------
       // ---------------------------------------------------------------------------------
@@ -608,9 +608,9 @@ void SimulationTools::CreateTheFirstData()
       {
         // ----------------------- Efficiency( Pt, Rapidity, Phi ) ----------------------- 
         double phiInDeg = mom.Phi() * TMath::RadToDeg();
-        int thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, normalized_rapidity, phiInDeg );
+        int thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, y0, phiInDeg );
         //eff = fEfficiency_vector[ipid]->GetEfficiency( thisBin );
-        eff = GetEfficiency( ipid, pt*1e+3, normalized_rapidity, phiInDeg );
+        eff = GetEfficiency( ipid, pt*1e+3, y0, phiInDeg );
         // ----------------------- Efficiency( Pt, Rapidity, Phi ) ----------------------- 
 
         if( gRandom->Uniform() < eff )
@@ -637,8 +637,8 @@ void SimulationTools::CreateTheFirstData()
       if( particleDet[iTrack]==1 )
       {
         double weight_factor = 0.;
-        if( normalized_rapidity > +fDelta ) weight_factor = +1.; // forward
-        else if( normalized_rapidity < -fDelta ) weight_factor = -1.; // backward
+        if( y0 > +fDelta ) weight_factor = +1.; // forward
+        else if( y0 < -fDelta ) weight_factor = -1.; // backward
         else weight_factor = 0.;
 
         int iBinRapWeight = iBinRap - 1; // To compensate the index in array
@@ -716,7 +716,7 @@ void SimulationTools::CreateTheFirstData()
       TVector3 mom( particlePx[iTrack], particlePy[iTrack], particlePz[iTrack] );
       double pt = mom.Pt();
 
-      double normalized_rapidity = particleY[iTrack];
+      double y0 = particleY[iTrack];
 
       int ipid = particleID[iTrack];
       double phi_lab = mom.Phi();
@@ -726,13 +726,13 @@ void SimulationTools::CreateTheFirstData()
       if( bUseOptAzi )
       {
         int iBinPt = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt );
-        int iBinRap = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity );
+        int iBinRap = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( y0 );
         int iBinPhi = TMath::Nint( phi_rel_q/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
         double val = hist_pt_rap_phi_meas[ipid]->GetBinContent( iBinPt, iBinRap, iBinPhi );
         hist_pt_rap_phi_meas[ipid]->SetBinContent( iBinPt, iBinRap, iBinPhi, val+1 ); // Fill method for uneven binning
       }
       else
-        hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, phi_rel_q );
+        hist_pt_rap_phi_meas[ipid]->Fill( pt, y0, phi_rel_q );
 
 
 
@@ -764,14 +764,11 @@ void SimulationTools::CreateTheFirstData()
 
         double avgReal = ( hist_pt_rap_phi_real[ipid]->GetBinContent( ipt+1, irap+1, binMphi ) + hist_pt_rap_phi_real[ipid]->GetBinContent( ipt+1, irap+1, binPphi ) );
         double avgMeas = ( hist_pt_rap_phi_meas[ipid]->GetBinContent( ipt+1, irap+1, binMphi ) + hist_pt_rap_phi_meas[ipid]->GetBinContent( ipt+1, irap+1, binPphi ) );
-        //double errMeas = ( hist_pt_rap_phi_meas[ipid]->GetBinError( ipt+1, irap+1, binMphi ) + hist_pt_rap_phi_meas[ipid]->GetBinError( ipt+1, irap+1, binPphi ) );
 
         hist_pt_rap_phi_real[ipid]->SetBinContent( ipt+1, irap+1, binMphi, avgReal );
         hist_pt_rap_phi_real[ipid]->SetBinContent( ipt+1, irap+1, binPphi, avgReal );
         hist_pt_rap_phi_meas[ipid]->SetBinContent( ipt+1, irap+1, binMphi, avgMeas );
         hist_pt_rap_phi_meas[ipid]->SetBinContent( ipt+1, irap+1, binPphi, avgMeas );
-        //hist_pt_rap_phi_meas[ipid]->SetBinError( ipt+1, irap+1, binMphi, errMeas );
-        //hist_pt_rap_phi_meas[ipid]->SetBinError( ipt+1, irap+1, binPphi, errMeas );
       }
     }
   }
@@ -1008,8 +1005,8 @@ void SimulationTools::SampleAndMakeTM()
       TVector3 mom( plab_x, plab_y, plab_z );
 
       // This should be consistent as in producing Exp Data.
-      double normalized_rapidity = ylab/y_cm - 1.;
-      particleY[iTrack] = normalized_rapidity;
+      double y0 = ylab/y_cm - 1.;
+      particleY[iTrack] = y0;
 
       int ipid = particleID[iTrack];
       particlePhi[iTrack] = particle_phi;
@@ -1030,9 +1027,9 @@ void SimulationTools::SampleAndMakeTM()
       {
         // ----------------------- Efficiency( Pt, Rapidity, Phi ) ----------------------- 
         double phiInDeg = mom.Phi() * TMath::RadToDeg();
-        int thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, normalized_rapidity, phiInDeg );
+        int thisBin = fEfficiency_vector[ipid]->FindFixBin( pt*1e+3, y0, phiInDeg );
         //eff = fEfficiency_vector[ipid]->GetEfficiency( thisBin );
-        eff = GetEfficiency( ipid, pt*1e+3, normalized_rapidity, phiInDeg );
+        eff = GetEfficiency( ipid, pt*1e+3, y0, phiInDeg );
         // ----------------------- Efficiency( Pt, Rapidity, Phi ) ----------------------- 
 
         if( gRandom->Uniform() < eff )
@@ -1072,8 +1069,8 @@ void SimulationTools::SampleAndMakeTM()
         double phi = mom.Phi();
 
         double weight_factor = 0.;
-        if( normalized_rapidity > +fDelta ) weight_factor = +1.; // forward
-        else if( normalized_rapidity < -fDelta ) weight_factor = -1.; // backward
+        if( y0 > +fDelta ) weight_factor = +1.; // forward
+        else if( y0 < -fDelta ) weight_factor = -1.; // backward
         else weight_factor = 0.;
 
         int iBinRapWeight = iBinRap - 1; // To compensate the index in array
@@ -1134,7 +1131,7 @@ void SimulationTools::SampleAndMakeTM()
         TVector3 mom( particlePx[iTrack], particlePy[iTrack], particlePz[iTrack] );
         double pt = mom.Pt();
 
-        double normalized_rapidity = particleY[iTrack];
+        double y0 = particleY[iTrack];
 
         int ipid = particleID[iTrack];
         double phi_lab = mom.Phi();
@@ -1151,7 +1148,7 @@ void SimulationTools::SampleAndMakeTM()
           hist_pt_rap_phi_meas[ipid]->SetBinContent( iBinPt, iBinRap, iBinPhi, val+1 ); // Fill method for uneven binning
         }
         else
-          hist_pt_rap_phi_meas[ipid]->Fill( pt, normalized_rapidity, phi_rel_q );
+          hist_pt_rap_phi_meas[ipid]->Fill( pt, y0, phi_rel_q );
 
         if( bUseOptAzi )
         {
@@ -1161,7 +1158,7 @@ void SimulationTools::SampleAndMakeTM()
           if( !fUseTotalQ )
           {
             int ptBin = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt ) - 1;
-            int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity ) - 1;
+            int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( y0 ) - 1;
             if( 0<=ptBin && ptBin<nBinPt && 0<=rapBin && rapBin<nBinRap ) 
             {
               int iBinReal = TMath::Nint( phi_rel_real_q/binWidthPhyOpt[iBinPt-1] ) + (nBinPhy+1);
@@ -1179,7 +1176,7 @@ void SimulationTools::SampleAndMakeTM()
           if( !fUseTotalQ )
           {
             int ptBin = hist_pt_rap_phi_meas[ipid]->GetXaxis()->FindBin( pt ) - 1;
-            int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( normalized_rapidity ) - 1;
+            int rapBin = hist_pt_rap_phi_meas[ipid]->GetYaxis()->FindBin( y0 ) - 1;
             if( 0<=ptBin && ptBin<nBinPt && 0<=rapBin && rapBin<nBinRap ) hist_phi_diff[ipid][ptBin][rapBin]->Fill( phi_rel_real_q, phi_rel_q );
           }
         }
@@ -1300,10 +1297,14 @@ void SimulationTools::CallParticle()
       double px = tree_px[iTrack]; // GeV/c
       double py = tree_py[iTrack]; // GeV/c
       double pz = tree_pz[iTrack]; // GeV/c
+
+      /*
+      // # of figure correction
       double scale_factor = std::pow( 10.0, 7 );
       px   = std::round(px * scale_factor) / scale_factor;
       py   = std::round(py * scale_factor) / scale_factor;
       pz   = std::round(pz * scale_factor) / scale_factor;
+      */
 
       // -----------------------------------------------------------------------
       // Re-calculate total energy and assign into LorentzVector
