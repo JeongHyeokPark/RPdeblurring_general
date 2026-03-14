@@ -1,0 +1,11 @@
+nEvents 1000
+proj_Z 50
+proj_A 108
+targ_Z 50
+targ_A 112
+BeamEnergy 0.270
+callModel 0
+IsCentral 0
+fTotalQ   1
+fOptimal  1
+fOptAzi   1
