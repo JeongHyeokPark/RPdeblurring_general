@@ -83,6 +83,7 @@ int main( int argc, char** argv )
   doSimulation.SetOptimizedAzimuth( fOptAzi );
   doSimulation.SetCollisionProperties( proj_Z, proj_A, targ_Z, targ_A, ke_beam );
   doSimulation.SetUseOptimal( fOptimal );
+  doSimulation.SetUseTotalQ( fUseTotalQ );
 
   // Efficiency file needs to be assigned here to construct TM
   TString effFileName = Form( "/home/jhpark/work/deblurring_spirit/merging/efficiency/eff_Sn%d_%s.root", proj_A, collisionEvent.Data() );
@@ -94,11 +95,6 @@ int main( int argc, char** argv )
 
 
   // Call data tree file
-  TFile* dataFile = new TFile( Form("expdata/tree_Sn%d.root", proj_A), "READ" );
-  TTree* dataTree = (TTree*) dataFile->Get( "tree" );
-  nEvents = dataTree->GetEntries();
-  doSimulation.SetNumberOfEvents( nEvents );
-  doSimulation.CallParticleFrom( dataTree );
   int initialized = doSimulation.Init();
   if( initialized==-1 )
   {
@@ -118,6 +114,12 @@ int main( int argc, char** argv )
   // If optimal weights you are going to use,
   if( fOptimal )
   {
+    TFile* dataFile = new TFile( Form("expdata/tree_Sn%d.root", proj_A), "READ" );
+    TTree* dataTree = (TTree*) dataFile->Get( "tree" );
+    nEvents = dataTree->GetEntries();
+    doSimulation.SetNumberOfEvents( nEvents );
+    doSimulation.CallParticleFrom( dataTree );
+
     doSimulation.UpdateInternalDistribution();
 
     // Calculate optimal weight

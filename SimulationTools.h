@@ -237,8 +237,8 @@ void SimulationTools::RandomizeRegularization()
 
 int SimulationTools::Init()
 {
-  if( fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) cout << "Please set model or TH3D class as an input to emit the particles" << endl;
-  if( fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) return -1;
+  if( !fRLfile && fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) cout << "Please set model or TH3D class as an input to emit the particles" << endl;
+  if( !fRLfile && fDataTree==nullptr && fHistogramRestored.size() == 0 && fModel == nullptr ) return -1;
 
   PrepareMass();
 
@@ -260,8 +260,6 @@ int SimulationTools::Init()
 
 
   // ---------------------------------- Prepare histograms ---------------------------------- 
-  if( fDataTree || fModel )
-  {
     nBinPt = 25;
     //for( int ipid=0; ipid<nParticleType; ipid++ ) binWidthPt[ipid] = .10;
     binWidthPt[0] = .10; binWidthPt[1] = .15; binWidthPt[2] = .23; binWidthPt[3] = .29; binWidthPt[4] = .23;
@@ -277,7 +275,6 @@ int SimulationTools::Init()
     phiMin = -nBinPhy*binWidthPhy - binWidthPhy/2.;
     phiMax =  nBinPhy*binWidthPhy + binWidthPhy/2.;
     nBinPhi = (phiMax - phiMin) / binWidthPhy + 0.1;
-  }
   if( fHistogramRestored.size()!=0 )
   {
     nBinPt = fHistogramRestored[0]->GetNbinsX();
@@ -419,7 +416,7 @@ int SimulationTools::Init()
     }
 
 
-    if( !bUseOptimal )
+    if( !fUseTotalQ )
     {
       for( int ipid=0; ipid<nParticleType; ipid++ )
         for( int ipt=0; ipt<nBinPt; ipt++ )
@@ -462,8 +459,11 @@ int SimulationTools::Init()
             if( 0. < binContent ) hist_pt_rap_phi_rest[ipid]->SetBinContent( ipt+1, irap+1, iphi+1, binContent );
             if( 0. < binContent && iphi!=endBin ) fCheckedBin[ipid].push_back( thisBin );
 
-            binContent = fHistogramMeasured[ipid]->GetBinContent( ipt+1, irap+1, iphi+1 );
-            if( 0. < binContent ) hist_pt_rap_phi_meas[ipid]->SetBinContent( ipt+1, irap+1, iphi+1, binContent );
+            if( bUseOptimal )
+            {
+              binContent = fHistogramMeasured[ipid]->GetBinContent( ipt+1, irap+1, iphi+1 );
+              if( 0. < binContent ) hist_pt_rap_phi_meas[ipid]->SetBinContent( ipt+1, irap+1, iphi+1, binContent );
+            }
           }
         }
       }
